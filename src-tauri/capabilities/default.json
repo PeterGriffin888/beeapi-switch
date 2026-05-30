@@ -1,0 +1,14 @@
+{
+  "identifier": "default",
+  "description": "Default permissions required by the BeeAPI Switch UI.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-write-text-file",
+    "updater:default",
+    "core:tray:default"
+  ]
+}

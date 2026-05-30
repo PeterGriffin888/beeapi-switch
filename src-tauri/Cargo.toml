@@ -1,0 +1,49 @@
+[package]
+name = "beeapi-switch"
+version = "0.1.2"
+description = "One-click configuration tool for BeeAPI AI coding agents."
+authors = ["BeeAPI"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "beeapi_switch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+toml_edit = "0.22"
+anyhow = "1"
+thiserror = "1"
+dirs = "5"
+chrono = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "stream"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time"] }
+axum = { version = "0.7", default-features = false, features = ["http1", "tokio", "query"] }
+tower = "0.5"
+futures-util = "0.3"
+bytes = "1"
+parking_lot = "0.12"
+tauri-plugin-updater = "2.0.0-rc.4"
+getrandom = "0.3"
+url = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows-sys = { version = "0.59.0", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_Foundation", "Win32_System_Threading"] }
+
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

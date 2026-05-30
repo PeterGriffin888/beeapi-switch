@@ -1,0 +1,31 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Tauri / Rust
+src-tauri/target
+release/
+_ref/
+.kiro/
+
+# Tauri updater signing keys
+.tauri/
+*.key
+*.key.pub
+
+# Local clone of public update artifact repo
+.update-repo/
+
+.update-repo*/

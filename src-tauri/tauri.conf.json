@@ -1,0 +1,78 @@
+{
+  "productName": "BeeAPI Switch",
+  "version": "0.1.2",
+  "identifier": "ai.beeapi.switch",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BeeAPI Switch",
+        "width": 960,
+        "height": 640,
+        "minWidth": 820,
+        "minHeight": 560,
+        "resizable": true,
+        "center": true,
+        "decorations": true,
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "copyright": "BeeAPI",
+    "category": "DeveloperTool",
+    "shortDescription": "One-click BeeAPI config for AI coding CLIs",
+    "longDescription": "Configure Claude Code, Codex, Gemini CLI, OpenCode and OpenClaw to use the BeeAPI gateway with a single click.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": [
+          "zh-CN",
+          "en-US"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "beeapi-switch",
+          "beeapi"
+        ]
+      },
+      "mobile": []
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/PeterGriffin888/beeapi-switch/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY3RDdBOTNCRkUyMTRGNDEKUldSQlR5SCtPNm5YWjFlN2hMcGxjRENGRmFycVd5TlVEbGt1T3dUUEtHVVdWNHRPZVBib3E2RU4K"
+    }
+  }
+}
