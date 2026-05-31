@@ -433,7 +433,7 @@ fn list_status() -> Result<Vec<ConfigStatus>, String> {
 }
 
 #[tauri::command]
-async fn sync_codex_history() -> Result<String, String> {
+async fn sync_codex_history() -> Result<serde_json::Value, String> {
     let home = dirs::home_dir().ok_or_else(|| "cannot locate home directory".to_string())?;
     let codex_dir = codex_root(&home);
     if !codex_dir.exists() {
@@ -558,11 +558,12 @@ async fn sync_codex_history() -> Result<String, String> {
         }
     }
 
-    let backup_text = backup_dir
-        .as_ref()
-        .map(|p| format!("; backup saved to {}", p.display()))
-        .unwrap_or_else(|| "; no changes needed backup".to_string());
-    Ok(format!("Codex history sync completed: updated {files_updated} session file(s), changed {db_updated} database row(s). Provider: {target_provider}{backup_text}"))
+    Ok(serde_json::json!({
+        "files_updated": files_updated,
+        "db_updated": db_updated,
+        "provider": target_provider,
+        "backup_dir": backup_dir.map(|p| p.display().to_string()),
+    }))
 }
 
 fn copy_dir_contents(src_root: &std::path::Path, dst_root: &std::path::Path) -> Result<usize, String> {
@@ -595,7 +596,7 @@ fn copy_dir_contents(src_root: &std::path::Path, dst_root: &std::path::Path) -> 
 }
 
 #[tauri::command]
-fn rollback_latest_codex_history_backup() -> Result<String, String> {
+fn rollback_latest_codex_history_backup() -> Result<serde_json::Value, String> {
     let home = dirs::home_dir().ok_or_else(|| "cannot locate home directory".to_string())?;
     let codex_dir = codex_root(&home);
     let root = home
@@ -629,12 +630,11 @@ fn rollback_latest_codex_history_backup() -> Result<String, String> {
         db_restored = true;
     }
 
-    Ok(format!(
-        "Rolled back Codex history from {}: restored {} session file(s){}.",
-        backup.display(),
-        files_restored,
-        if db_restored { ", and restored database" } else { "" }
-    ))
+    Ok(serde_json::json!({
+        "backup_dir": backup.display().to_string(),
+        "files_restored": files_restored,
+        "db_restored": db_restored,
+    }))
 }
 
 #[tauri::command]

@@ -248,24 +248,55 @@ pub fn codex_status(home: &PathBuf) -> Result<StatusOutcome> {
         .map(String::from);
     // Read key from auth.json
     let auth_path = root.join("auth.json");
-    let key = if auth_path.exists() {
+    let auth = if auth_path.exists() {
         std::fs::read_to_string(&auth_path)
             .ok()
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-            .and_then(|v| {
-                v.get("OPENAI_API_KEY")
-                    .and_then(|k| k.as_str())
-                    .map(String::from)
-            })
     } else {
         None
     };
+    let key = auth
+        .as_ref()
+        .and_then(|v| {
+            v.get("OPENAI_API_KEY")
+                .and_then(|k| k.as_str())
+                .map(String::from)
+        })
+        .or_else(|| chatgpt_login_hint(auth.as_ref()));
     Ok(StatusOutcome {
         configured,
         base_url,
         model,
         key,
         wire_api,
+    })
+}
+
+fn chatgpt_login_hint(auth: Option<&Value>) -> Option<String> {
+    let auth = auth?;
+    let mode_is_chatgpt = auth
+        .get("auth_mode")
+        .and_then(|v| v.as_str())
+        .map(|mode| mode.eq_ignore_ascii_case("chatgpt"))
+        .unwrap_or(false);
+    let has_tokens = auth.get("tokens").is_some()
+        || auth.get("id_token").is_some()
+        || auth.get("access_token").is_some()
+        || auth.get("refresh_token").is_some();
+    if !mode_is_chatgpt && !has_tokens {
+        return None;
+    }
+    let email = auth
+        .get("email")
+        .or_else(|| auth.pointer("/account/email"))
+        .or_else(|| auth.pointer("/profile/email"))
+        .or_else(|| auth.pointer("/user/email"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty());
+
+    Some(match email {
+        Some(email) => format!("ChatGPT 登录（官号 · {email}）"),
+        None => "ChatGPT 登录（官号）".to_string(),
     })
 }
 

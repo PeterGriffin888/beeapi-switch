@@ -9,7 +9,7 @@
 //!   tab.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -260,8 +260,13 @@ impl Pool {
         let existing: HashMap<String, KeyRuntime> =
             guard.drain(..).map(|r| (r.key.id.clone(), r)).collect();
         let mut existing = existing;
+        let mut seen_secrets = HashSet::new();
         let mut merged = Vec::with_capacity(new_keys.len());
         for k in new_keys {
+            let secret_key = k.secret.trim().to_string();
+            if !secret_key.is_empty() && !seen_secrets.insert(secret_key) {
+                continue;
+            }
             if let Some(mut prev) = existing.remove(&k.id) {
                 prev.key = k;
                 merged.push(prev);

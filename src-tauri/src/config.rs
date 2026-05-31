@@ -1,7 +1,10 @@
 //! Dispatch layer: maps frontend tool IDs to concrete writer functions,
 //! handles backup of existing configs and surfaces a status view.
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, Context, Result};
 use chrono::Local;
@@ -88,12 +91,23 @@ fn backup_existing(tool: &str, paths: &[PathBuf]) -> Result<Option<PathBuf>> {
     }
 
     let home = home_dir()?;
-    let stamp = Local::now().format("%Y%m%d-%H%M%S").to_string();
-    let dir = home
+    let tool_backup_root = home
         .join(".beeapi-switch")
         .join("backups")
-        .join(tool)
-        .join(stamp);
+        .join(tool);
+
+    if latest_backup_has_same_files(&tool_backup_root, &existing) {
+        return Ok(None);
+    }
+
+    let stamp = Local::now().format("%Y%m%d-%H%M%S").to_string();
+    let mut dir = tool_backup_root.join(&stamp);
+    for i in 2..100 {
+        if !dir.exists() {
+            break;
+        }
+        dir = tool_backup_root.join(format!("{stamp}-{i}"));
+    }
     std::fs::create_dir_all(&dir)
         .with_context(|| format!("Failed to create backup dir {}", dir.display()))?;
 
@@ -106,6 +120,46 @@ fn backup_existing(tool: &str, paths: &[PathBuf]) -> Result<Option<PathBuf>> {
             .with_context(|| format!("Failed to backup {} -> {}", src.display(), dst.display()))?;
     }
     Ok(Some(dir))
+}
+
+fn latest_backup_has_same_files(tool_backup_root: &Path, existing: &[&PathBuf]) -> bool {
+    if !tool_backup_root.exists() {
+        return false;
+    }
+    let latest = std::fs::read_dir(tool_backup_root)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.flatten())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .max_by_key(|path| {
+            std::fs::metadata(path)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        });
+
+    let Some(latest) = latest else {
+        return false;
+    };
+
+    existing.iter().all(|src| {
+        let Some(name) = src.file_name().and_then(|s| s.to_str()) else {
+            return false;
+        };
+        let Some(prev) = find_backup_file(&latest, name) else {
+            return false;
+        };
+        let Ok(current) = std::fs::read(src) else {
+            return false;
+        };
+        let Ok(backed_up) = std::fs::read(prev) else {
+            return false;
+        };
+        current == backed_up
+    })
 }
 
 pub fn apply(tool: &str, api_key: &str, model: &str, base: Option<&str>) -> Result<ApplyResult> {
@@ -180,7 +234,7 @@ pub fn list_status() -> Result<Vec<ConfigStatus>> {
             configured: s.configured,
             base_url: s.base_url,
             model: s.model,
-            key_hint: s.key.map(|k| mask_key(&k)),
+            key_hint: s.key.map(|k| display_key_hint(&k)),
         });
     }
     Ok(out)
@@ -345,6 +399,32 @@ fn backup_summary(tool: &str, backup_path: &Path) -> (Option<String>, Option<Str
             .or_else(|| providers.values().find(|provider| provider.get("options").is_some()))
             .or_else(|| providers.values().next())
     }
+    fn chatgpt_login_hint(auth: Option<&serde_json::Value>) -> Option<String> {
+        let auth = auth?;
+        let mode_is_chatgpt = auth
+            .get("auth_mode")
+            .and_then(|v| v.as_str())
+            .map(|mode| mode.eq_ignore_ascii_case("chatgpt"))
+            .unwrap_or(false);
+        let has_tokens = auth.get("tokens").is_some()
+            || auth.get("id_token").is_some()
+            || auth.get("access_token").is_some()
+            || auth.get("refresh_token").is_some();
+        if !mode_is_chatgpt && !has_tokens {
+            return None;
+        }
+        let email = auth
+            .get("email")
+            .or_else(|| auth.pointer("/account/email"))
+            .or_else(|| auth.pointer("/profile/email"))
+            .or_else(|| auth.pointer("/user/email"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty());
+        Some(match email {
+            Some(email) => format!("ChatGPT 登录（官号 · {email}）"),
+            None => "ChatGPT 登录（官号）".to_string(),
+        })
+    }
 
     match tool {
         "claude-code" => {
@@ -382,18 +462,7 @@ fn backup_summary(tool: &str, backup_path: &Path) -> (Option<String>, Option<Str
                 .filter(|s| !s.trim().is_empty())
                 .map(String::from);
             let key_hint = mask_opt(key).or_else(|| {
-                let is_chatgpt = auth
-                    .as_ref()
-                    .and_then(|v| v.get("auth_mode"))
-                    .and_then(|v| v.as_str())
-                    .map(|mode| mode.eq_ignore_ascii_case("chatgpt"))
-                    .unwrap_or(false);
-                let has_tokens = auth.as_ref().and_then(|v| v.get("tokens")).is_some();
-                if is_chatgpt || has_tokens {
-                    Some("ChatGPT 登录".to_string())
-                } else {
-                    None
-                }
+                chatgpt_login_hint(auth.as_ref())
             });
             (base, model, key_hint)
         }
@@ -467,6 +536,26 @@ fn backup_summary(tool: &str, backup_path: &Path) -> (Option<String>, Option<Str
     }
 }
 
+fn backup_fingerprint(entry: &BackupEntry) -> String {
+    fn norm(value: &Option<String>) -> String {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("—")
+            .to_ascii_lowercase()
+    }
+
+    format!(
+        "{}\n{}\n{}\n{}\n{}",
+        entry.tool,
+        norm(&entry.base_url),
+        norm(&entry.model),
+        norm(&entry.key_hint),
+        entry.files.join("|"),
+    )
+}
+
 pub fn list_backups(tool_filter: Option<&str>) -> Result<Vec<BackupEntry>> {
     let home = home_dir()?;
     let root = home.join(".beeapi-switch").join("backups");
@@ -525,6 +614,8 @@ pub fn list_backups(tool_filter: Option<&str>) -> Result<Vec<BackupEntry>> {
         }
     }
     out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    let mut seen = HashSet::new();
+    out.retain(|entry| seen.insert(backup_fingerprint(entry)));
     Ok(out)
 }
 
@@ -658,4 +749,12 @@ fn mask_key(key: &str) -> String {
         return "****".to_string();
     }
     format!("{}****{}", &key[..4], &key[len - 4..])
+}
+
+fn display_key_hint(key: &str) -> String {
+    if key.to_ascii_lowercase().contains("chatgpt") {
+        key.to_string()
+    } else {
+        mask_key(key)
+    }
 }

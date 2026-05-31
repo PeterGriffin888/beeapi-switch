@@ -78,6 +78,19 @@ interface HealthCheckReport {
   steps: HealthCheckStep[];
 }
 
+interface SyncHistoryReport {
+  files_updated: number;
+  db_updated: number;
+  provider: string;
+  backup_dir: string | null;
+}
+
+interface RollbackHistoryReport {
+  backup_dir: string;
+  files_restored: number;
+  db_restored: boolean;
+}
+
 interface ImportNotice {
   id: number;
   ok: boolean;
@@ -219,6 +232,7 @@ function ToolsView() {
   const [unlockConfirmOpen, setUnlockConfirmOpen] = useState(false);
   const [unlockResult, setUnlockResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [syncHistoryBusy, setSyncHistoryBusy] = useState(false);
+  const [rollbackHistoryBusy, setRollbackHistoryBusy] = useState(false);
   const [syncHistoryResult, setSyncHistoryResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const active = useMemo<ToolMeta>(
@@ -315,8 +329,16 @@ function ToolsView() {
     setError(null);
     setSyncHistoryResult(null);
     try {
-      const msg = await invoke<string>("sync_codex_history");
-      setSyncHistoryResult({ ok: true, msg });
+      const r = await invoke<SyncHistoryReport>("sync_codex_history");
+      setSyncHistoryResult({
+        ok: true,
+        msg: t("tools.syncHistoryResult", {
+          files: r.files_updated,
+          rows: r.db_updated,
+          provider: r.provider,
+          backup: r.backup_dir || t("tools.syncHistoryNoBackup"),
+        }),
+      });
     } catch (e) {
       setSyncHistoryResult({ ok: false, msg: humanizeError(String(e)) });
     } finally {
@@ -326,16 +348,23 @@ function ToolsView() {
 
   async function onRollbackHistory() {
     if (!confirm(t("tools.rollbackHistoryConfirm"))) return;
-    setSyncHistoryBusy(true);
+    setRollbackHistoryBusy(true);
     setError(null);
     setSyncHistoryResult(null);
     try {
-      const msg = await invoke<string>("rollback_latest_codex_history_backup");
-      setSyncHistoryResult({ ok: true, msg });
+      const r = await invoke<RollbackHistoryReport>("rollback_latest_codex_history_backup");
+      setSyncHistoryResult({
+        ok: true,
+        msg: t("tools.rollbackHistoryResult", {
+          backup: r.backup_dir,
+          files: r.files_restored,
+          db: r.db_restored ? t("dialog.yes") : t("dialog.no"),
+        }),
+      });
     } catch (e) {
       setSyncHistoryResult({ ok: false, msg: humanizeError(String(e)) });
     } finally {
-      setSyncHistoryBusy(false);
+      setRollbackHistoryBusy(false);
     }
   }
 
@@ -492,6 +521,32 @@ function ToolsView() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
+  function isChatGptLogin(keyHint?: string | null): boolean {
+    return !!keyHint && keyHint.toLowerCase().includes("chatgpt");
+  }
+
+  function currentConfigItems(s: ConfigStatus) {
+    if (isChatGptLogin(s.key_hint) && !s.base_url && !s.model) {
+      return [{ label: t("tools.key"), value: s.key_hint! }];
+    }
+    return [
+      { label: t("tools.address"), value: s.base_url },
+      { label: t("tools.key"), value: s.key_hint },
+      { label: t("tools.model"), value: s.model },
+    ].filter((item) => item.value && item.value.trim());
+  }
+
+  function backupSummaryItems(backup: BackupEntry) {
+    if (isChatGptLogin(backup.key_hint) && !backup.base_url && !backup.model) {
+      return [{ label: t("tools.key"), value: backup.key_hint! }];
+    }
+    return [
+      { label: t("tools.model"), value: backup.model },
+      { label: t("tools.address"), value: backup.base_url },
+      { label: t("tools.key"), value: backup.key_hint },
+    ].filter((item) => item.value && item.value.trim());
+  }
+
   return (
     <div className="body">
       <aside className="sidebar">
@@ -556,18 +611,12 @@ function ToolsView() {
           <div className="config-card">
             <div className="config-title">{t("tools.currentConfig")}</div>
             <div className="config-items">
-              <div className="config-row">
-                <span className="config-label">{t("tools.address")}</span>
-                <code>{statuses[active.id]!.base_url || "\u2014"}</code>
-              </div>
-              <div className="config-row">
-                <span className="config-label">{t("tools.key")}</span>
-                <code>{statuses[active.id]!.key_hint || "\u2014"}</code>
-              </div>
-              <div className="config-row">
-                <span className="config-label">{t("tools.model")}</span>
-                <code>{statuses[active.id]!.model || "\u2014"}</code>
-              </div>
+              {currentConfigItems(statuses[active.id]!).map((item) => (
+                <div className="config-row" key={item.label}>
+                  <span className="config-label">{item.label}</span>
+                  <code>{item.value}</code>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -642,9 +691,9 @@ function ToolsView() {
                   <div>
                     <div className="mono">{backup.name}</div>
                     <div className="backup-summary-grid">
-                      <span>{t("tools.model")}: <code>{backup.model || "—"}</code></span>
-                      <span>{t("tools.address")}: <code>{backup.base_url || "—"}</code></span>
-                      <span>{t("tools.key")}: <code>{backup.key_hint || "—"}</code></span>
+                      {backupSummaryItems(backup).map((item) => (
+                        <span key={item.label}>{item.label}: <code>{item.value}</code></span>
+                      ))}
                     </div>
                     <div className="hint">{fmtBackupTime(backup.modified)} · {backup.files.join(", ")}</div>
                   </div>
@@ -720,7 +769,7 @@ function ToolsView() {
                 <button
                   className="btn"
                   onClick={onSyncHistory}
-                  disabled={syncHistoryBusy}
+                  disabled={syncHistoryBusy || rollbackHistoryBusy}
                   title={t("tools.syncHistoryDesc")}
                 >
                   {syncHistoryBusy ? (
@@ -736,9 +785,9 @@ function ToolsView() {
                 <button
                   className="btn ghost"
                   onClick={onRollbackHistory}
-                  disabled={syncHistoryBusy}
+                  disabled={syncHistoryBusy || rollbackHistoryBusy}
                 >
-                  {syncHistoryBusy ? t("tools.rollingBackHistory") : t("tools.rollbackHistory")}
+                  {rollbackHistoryBusy ? t("tools.rollingBackHistory") : t("tools.rollbackHistory")}
                 </button>
               </>
             )}
