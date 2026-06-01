@@ -58,6 +58,22 @@ interface PlaygroundSession {
   imageQuality: string;
 }
 
+const IMAGE_SIZE_OPTIONS = [
+  { value: "1024x1024", labelKey: "playground.imageSizeSquare" },
+  { value: "1792x1024", labelKey: "playground.imageSizeLandscapeWide" },
+  { value: "1024x768", labelKey: "playground.imageSizeLandscape" },
+  { value: "768x1024", labelKey: "playground.imageSizePortrait" },
+  { value: "1024x1792", labelKey: "playground.imageSizePortraitTall" },
+  { value: "", labelKey: "playground.imageSizeAuto" },
+];
+
+function normalizeImageSize(size: string | undefined): string {
+  if (!size) return "";
+  if (IMAGE_SIZE_OPTIONS.some((option) => option.value === size)) return size;
+  if (["256x256", "512x512"].includes(size)) return "1024x1024";
+  return "";
+}
+
 function msgId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -204,6 +220,11 @@ export default function PlaygroundView() {
         loadedSessions = [defaultSession];
         localStorage.setItem("beeapi-playground-sessions", JSON.stringify(loadedSessions));
       }
+
+      loadedSessions = loadedSessions.map((s) => ({
+        ...s,
+        imageSize: normalizeImageSize(s.imageSize),
+      }));
 
       setSessions(loadedSessions);
 
@@ -1104,12 +1125,11 @@ export default function PlaygroundView() {
                         onChange={(e) => updateActiveSession((s) => ({ ...s, imageSize: e.target.value }))}
                         style={{ width: 160 }}
                       >
-                        <option value="">{t("playground.imageSizeAuto")}</option>
-                        <option value="256x256">256×256</option>
-                        <option value="512x512">512×512</option>
-                        <option value="1024x1024">1024×1024</option>
-                        <option value="1024x1792">1024×1792</option>
-                        <option value="1792x1024">1792×1024</option>
+                        {IMAGE_SIZE_OPTIONS.map((option) => (
+                          <option key={option.labelKey} value={option.value}>
+                            {t(option.labelKey)}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="playground-setting-row">

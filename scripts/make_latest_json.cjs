@@ -26,10 +26,16 @@ function walk(dir, out = []) {
   return out;
 }
 
-function platformFor(fileName) {
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith(".exe")) return "windows-x86_64";
-  if (lower.endsWith(".appimage")) return "linux-x86_64";
+function platformFor(filePath) {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".exe")) {
+    if (lower.includes("aarch64") || lower.includes("arm64")) return "windows-aarch64";
+    return "windows-x86_64";
+  }
+  if (lower.endsWith(".appimage")) {
+    if (lower.includes("aarch64") || lower.includes("arm64")) return "linux-aarch64";
+    return "linux-x86_64";
+  }
   if (lower.endsWith(".dmg")) {
     if (lower.includes("aarch64") || lower.includes("arm64") || lower.includes("apple-silicon")) return "darwin-aarch64";
     return "darwin-x86_64";
@@ -53,7 +59,7 @@ for (const sigPath of sigFiles) {
   const assetPath = sigPath.slice(0, -4);
   if (!fs.existsSync(assetPath)) continue;
   const assetName = path.basename(assetPath);
-  const platform = platformFor(assetName);
+  const platform = platformFor(assetPath);
   if (!platform) continue;
 
   const signature = fs.readFileSync(sigPath, "utf8").trim();
