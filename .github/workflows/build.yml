@@ -79,14 +79,25 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run tauri -- build --target ${{ matrix.target }} --bundles dmg
+          # Apple code signing + notarization. When these secrets are unset the
+          # Tauri CLI silently skips signing (producing an unsigned build, same
+          # as before); when set it signs with the Developer ID cert and runs
+          # notarytool + stapler automatically. No manual keychain steps needed.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run tauri -- build --target ${{ matrix.target }} --bundles app,dmg
       - name: 上传 macOS 产物
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.sig
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
 
   linux:
@@ -160,5 +171,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: BeeAPI Switch ${{ github.ref_name }}
-          body: BeeAPI Switch 发布 ！！
+          body: |
+            本次更新：
+            - 版本号升级到 0.1.4。
+            - 软件启动时自动检查 GitHub Release 更新，有新版本时自动下载安装。
+            - 发布流程会生成 Tauri 自动更新所需的 latest.json。
           files: release/update/*

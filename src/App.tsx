@@ -13,6 +13,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import { ToolIcon } from "./icons";
 import { humanizeError } from "./errors";
 import { t } from "./i18n";
+import { checkForAppUpdate } from "./updater";
 
 interface ApplyResult {
   tool: string;
@@ -140,6 +141,8 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    void checkForAppUpdate();
+
     let unlistenImported: (() => void) | undefined;
     let unlistenImportError: (() => void) | undefined;
     listen<ImportPayload>("beeapi-imported", (event) => {

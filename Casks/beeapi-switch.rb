@@ -1,5 +1,5 @@
 cask "beeapi-switch" do
-  version "0.1.0"
+  version "0.1.4"
 
   if Hardware::CPU.arm?
     url "https://github.com/PeterGriffin888/beeapi-switch/releases/download/v#{version}/BeeAPI.Switch_#{version}_aarch64.dmg"
